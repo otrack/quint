@@ -1,21 +1,4 @@
 // -*- mode: Bluespec; -*-
-module Spells{
-    def require(cond: bool): bool = cond
-
-    def setEquals(s: Set[x], t: Set[x]): bool = {
-      s.size()==t.size() and s.forall(y => t.contains(y))
-    }
-
-    def setEqualsOrOneEmpty(s: Set[x], t: Set[x]): bool = {
-      (s.size()==0 or t.size()==0) or setEquals(s,t)
-    }
-
-    def setExists(s: Set[x], cond: x => bool): bool = {
-      s.fold(false, (result, elem) => result or cond(elem))
-    }
-
-}
-
 module System{
     type Process = str
     type Tx = str
@@ -26,7 +9,7 @@ module System{
 
 module Consensus{
 
-    import Spells.*
+    import Spells.* from "../Spells.qnt"
     import System.*
 
     type ConsensusState = {
@@ -90,7 +73,7 @@ module Consensus{
 
 module ConsensusTests {
 
-    import Spells.*
+    import Spells.* from "../Spells.qnt"
     import System.*
     import Consensus.*
 
@@ -133,7 +116,7 @@ module ConsensusTests {
 // - idempotence is not granter (that is, two entries might have common values).
 module Ledger{
 
-    import Spells.*
+    import Spells.* from "../Spells.qnt"
     import System.*
     import Consensus.*
     
@@ -197,7 +180,7 @@ module Ledger{
 
 module LedgerTests {
 
-    import Spells.*
+    import Spells.* from "../Spells.qnt"
     import System.*
     import Ledger.*
 
