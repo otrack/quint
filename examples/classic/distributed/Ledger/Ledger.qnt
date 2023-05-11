@@ -56,33 +56,30 @@ module Consensus{
 
     pure def decisionOf(state: ConsensusState, p: Process): Set[Tx] = state.decided.get(p)
 
-    pure def propose(state: ConsensusState, p: Process, txs: Set[Tx]): ConsensusResult = {
-      val res = PROCESSES.contains(p) and not(hasProposed(state, p)) and txs.size()!=0
+    pure def mayPropose(state: ConsensusState, p: Process, txs: Set[Tx]): bool = PROCESSES.contains(p) and not(hasProposed(state, p)) and txs.size()!=0
+
+    pure def mayDecide(state: ConsensusState, p: Process): bool = PROCESSES.contains(p) and state.hasProposed(p) and not(state.hasDecided(p))
+
+    pure def propose(state: ConsensusState, p: Process, txs: Set[Tx]): ConsensusState = {
       val newProposed = state.proposed.set(p, txs)
-      returnConsensusResult(state.with("proposed", newProposed), res)
+      state.with("proposed", newProposed)
     }
 
-    pure def decide(state: ConsensusState, p: Process): ConsensusResult = {
-      val res = PROCESSES.contains(p) and state.hasProposed(p) and not(state.hasDecided(p))
-      val st = if(res) {
-	  val proposal = state.proposed.get(oneOf(state.proposed.keys().filter(x => state.proposed.get(x).size()>0)))
-          val decisions = state.decided.keys().filter(x => state.decided.get(x).size()>0)
-          val decision = if (decisions.size()>0) {state.decided.get(oneOf(decisions))}  else {proposal}
-          val newDecided = state.decided.set(p, decision)
-          state.with("decided",newDecided)
-	}else{
-	  state
-	}
-      returnConsensusResult(st, res)      
+    pure def decide(state: ConsensusState, p: Process): ConsensusState = {
+      val proposal = state.proposed.get(oneOf(state.proposed.keys().filter(x => state.proposed.get(x).size()>0)))
+      val decisions = state.decided.keys().filter(x => state.decided.get(x).size()>0)
+      val decision = if (decisions.size()>0) {state.decided.get(oneOf(decisions))}  else {proposal}
+      val newDecided = state.decided.set(p, decision)
+      state.with("decided",newDecided)
     }
 
     // INVARIANTS
     
     // Irrevocability: a process decides at most once
-    // [Trivial from the preconditions in Consensus::decide.]
+    // [Require applying Consensus:mayDecide before Consensus:decide]
     
     // Validity: a process decides only submitted values
-    // [Trivial from the preconditions in Consensus::decide.]
+    // [Trivial from the code of Consensus:decide]
     
     // Agreement: no two processes decide different values
     pure def consensusAgreementInv(state: ConsensusState): bool = {
@@ -105,15 +102,15 @@ module ConsensusTests {
       initConsensusTests.then(
         nondet p = oneOf(PROCESSES)
         nondet tx = oneOf(TXS)
-        val st = propose(newConsensus, p, Set(tx)).state
-	not(propose(st, p, Set(tx)).result)
+        val st = propose(newConsensus, p, Set(tx))
+	not(mayPropose(st, p, Set(tx)))
       )
     }
 
     run decideNonProposedError = {
       initConsensusTests.then(
         nondet p = oneOf(PROCESSES)
-    	not(decide(newConsensus, p).result)
+	not(mayDecide(newConsensus, p))
       )
     }
 
@@ -123,8 +120,8 @@ module ConsensusTests {
     	nondet q = oneOf(PROCESSES)
     	nondet tx0 = oneOf(TXS)
     	nondet tx1 = oneOf(TXS)
-    	val st = propose(propose(newConsensus, p, Set(tx0)).state, q, Set(tx1)).state
-    	decide(st, p).result
+    	val st = propose(propose(newConsensus, p, Set(tx0)), q, Set(tx1))
+	mayDecide(st, p) and hasDecided(decide(st, p), p)
       )
     }
 
@@ -159,34 +156,36 @@ module Ledger{
 
     pure def entry(state: LedgerState, p: Process, i: int): Set[Tx] = state.log[i].decisionOf(p)
 
-    pure def submit(state: LedgerState, p: Process, txs: Set[Tx]): LedgerResult = {
+    pure def maySubmit(state: LedgerState, p: Process, txs: Set[Tx]): bool = {
       val currentConsensus = state.log[heightOf(state,p)]
-      if (currentConsensus.hasProposed(p)) {
-        returnLedgerResult(state, false)
-      } else {
-        val nextLog = state.log.replaceAt(heightOf(state,p), currentConsensus.propose(p, txs).state)
-	returnLedgerResult(state.with("log", nextLog), true)
-      }
+      txs.size()>0 and not(currentConsensus.hasProposed(p))
     }
 
-    pure def commit(state: LedgerState, p: Process): LedgerResult = {
+    pure def mayCommit(state: LedgerState, p: Process): bool = {
       val currentConsensus = state.log[heightOf(state,p)]
-      if (not(currentConsensus.hasProposed(p)) or currentConsensus.hasDecided(p)) {
-        returnLedgerResult(state, false)
-      } else {
-        val nextLog = if (heightOf(state, p) == height(state)) {
-	  state.log.append(newConsensus)
-	}else{
-	  state.log
-	}
-    	returnLedgerResult(state.with("log", nextLog.replaceAt(heightOf(state,p), currentConsensus.decide(p).state)), true)
+      currentConsensus.hasProposed(p) and not(currentConsensus.hasDecided(p))
+    }
+
+    pure def submit(state: LedgerState, p: Process, txs: Set[Tx]): LedgerState = {
+      val currentConsensus = state.log[heightOf(state,p)]
+      val nextLog = state.log.replaceAt(heightOf(state,p), currentConsensus.propose(p, txs))
+      state.with("log", nextLog)
+    }
+
+    pure def commit(state: LedgerState, p: Process): LedgerState = {
+      val currentConsensus = state.log[heightOf(state,p)]
+      val nextLog = if (heightOf(state, p) == height(state)) {
+          state.log.append(newConsensus)
+      }else{
+    	  state.log
       }
+      state.with("log", nextLog.replaceAt(heightOf(state,p), currentConsensus.decide(p)))
     }
 
     // INVARIANTS
     
     // Validity: every entry is submitted
-    // {Trivial from the precondition in Ledger:commit.]
+    // {Trivial from the code in Ledger:commit.]
     
     // Agreement: for any two processes, entries are prefix one from another
     pure def LedgerAgreementInv(state: ConsensusState): bool = {
@@ -210,27 +209,29 @@ module LedgerTests {
       initLedgerTests.then(
         nondet p = oneOf(PROCESSES)
         nondet tx = oneOf(TXS)
-        val st = submit(newLedger, p, Set(tx)).state
-	not(submit(st, p, Set(tx)).result)
+        val st = submit(newLedger, p, Set(tx))
+	not(maySubmit(st, p, Set(tx)))
       )
     }
 
-    run commitNonProposedError = {
+    run commitNonSubmittedError = {
       initLedgerTests.then(
         nondet p = oneOf(PROCESSES)
-    	not(commit(newLedger, p).result)
+    	not(mayCommit(newLedger, p))
       )
     }
 
-    run decideProposedSuccess = {
+    run commitSubmittedSuccess = {
       initLedgerTests.then(
         nondet p = oneOf(PROCESSES)
     	nondet q = oneOf(PROCESSES)
     	nondet tx0 = oneOf(TXS)
     	nondet tx1 = oneOf(TXS)
-    	val st = submit(submit(newLedger, p, Set(tx0)).state, q, Set(tx1)).state
-    	commit(st, p).result
+    	val st = submit(submit(newLedger, p, Set(tx0)), q, Set(tx1))
+    	mayCommit(st, p) and heightOf(commit(st, p), p)==1
       )
     }
+
+    // some random run of length k
 
 }

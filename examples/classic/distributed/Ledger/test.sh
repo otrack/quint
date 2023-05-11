@@ -1,15 +1,15 @@
 #!/bin/sh
 
-# echo "
-# proposeTwiceError
-# decideNonProposedError
-# decideProposedSuccess
-# " | quint -r Ledger.qnt::ConsensusTests
+echo "
+proposeTwiceError
+decideNonProposedError
+decideProposedSuccess
+" | quint -r Ledger.qnt::ConsensusTests
 
 echo "
 submitTwiceError
-commitNonProposedError
-decideProposedSuccess
+commitNonSubmittedError
+commitSubmittedSuccess
 " | quint -r Ledger.qnt::LedgerTests
 
 
