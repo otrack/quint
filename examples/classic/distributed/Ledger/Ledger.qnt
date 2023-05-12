@@ -1,6 +1,6 @@
 // -*- mode: Bluespec; -*-
 // A Ledger is a replicated log of blocks.
-// The definition below considers that
+// The specification below considers that
 // - replication is made with consensus (SMR)
 // - idempotence is not granted (that is, two entries might have transactions in common).
 module Ledger{
@@ -15,17 +15,17 @@ module Ledger{
 
     pure def newLedger(P: Set[Process]): LedgerState = {log: List(newConsensus(P))}
 
-    pure def isSubmitted(state: LedgerState, t: Tx): bool = true
-
-    pure def isCommitted(state: LedgerState, t: Tx): bool = true
-
-    pure def height(state: LedgerState): int = length(state.log.select(s => s.isDecided()))
+    pure def height(state: LedgerState): int = length(state.log.select(s => s.hasDecision()))
 
     pure def heightOf(state: LedgerState, p: Process): int = length(state.log.select(s => s.hasDecided(p)))
 
     pure def entry(state: LedgerState, p: Process, i: int): Set[Tx] = state.log[i].decisionOf(p)
 
     pure def lastEntry(state: LedgerState, p: Process): Set[Tx] = entry(state, p, heightOf(state, p))
+
+    pure def isSubmitted(state: LedgerState, t: Tx): bool = 0.to(height(state)).forall(h => not(isProposed(state.log[h], t)))
+
+    pure def isCommitted(state: LedgerState, t: Tx): bool = 0.to(height(state)).forall(h => not(isDecided(state.log[h], t)))
 
     pure def maySubmit(state: LedgerState, p: Process, txs: Set[Tx]): bool = {
       val currentConsensus = state.log[heightOf(state,p)]
@@ -54,7 +54,7 @@ module Ledger{
     }
 
     // INVARIANTS
-    
+
     // Validity: every entry is submitted
     pure def ledgerValidityInv(state: LedgerState): bool = {
       0.to(height(state)).forall(h => consensusValidityInv(state.log[h]))

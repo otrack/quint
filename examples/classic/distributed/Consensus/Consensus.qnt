@@ -21,7 +21,11 @@ module Consensus{
     
     pure def hasDecided(state: ConsensusState, p: Process): bool = state.decided.get(p).size() > 0
 
-    pure def isDecided(state: ConsensusState): bool = state.decided.keys().filter(x => state.decided.get(x).size()>0).size() > 0
+    pure def isProposed(state: ConsensusState, t: Tx): bool = state.proposed.keys().filter(p => state.proposed.get(p).contains(t)).size() > 0
+
+    pure def isDecided(state: ConsensusState, t: Tx): bool = state.decided.keys().filter(p => state.decided.get(p).contains(t)).size() > 0
+
+    pure def hasDecision(state: ConsensusState): bool = state.decided.keys().filter(p => state.decided.get(p).size()>0).size() > 0
 
     pure def decisionOf(state: ConsensusState, p: Process): Set[Tx] = state.decided.get(p)
 
