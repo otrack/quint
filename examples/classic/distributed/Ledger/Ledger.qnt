@@ -5,9 +5,9 @@
 // - idempotence is not granted (that is, two entries might have transactions in common).
 module Ledger{
 
-    import Spells.* from "./Spells"
-    import System.* from "./System"
-    import Consensus.* from "./Consensus"
+    import Spells.* from "../Common/Spells"
+    import System.* from "../Common/System"
+    import Consensus.* from "../Consensus/Consensus"
 
     type LedgerState = {
       log: List[ConsensusState],
@@ -15,11 +15,17 @@ module Ledger{
 
     pure def newLedger(P: Set[Process]): LedgerState = {log: List(newConsensus(P))}
 
+    pure def isSubmitted(state: LedgerState, t: Tx): bool = true
+
+    pure def isCommitted(state: LedgerState, t: Tx): bool = true
+
     pure def height(state: LedgerState): int = length(state.log.select(s => s.isDecided()))
 
     pure def heightOf(state: LedgerState, p: Process): int = length(state.log.select(s => s.hasDecided(p)))
 
     pure def entry(state: LedgerState, p: Process, i: int): Set[Tx] = state.log[i].decisionOf(p)
+
+    pure def lastEntry(state: LedgerState, p: Process): Set[Tx] = entry(state, p, heightOf(state, p))
 
     pure def maySubmit(state: LedgerState, p: Process, txs: Set[Tx]): bool = {
       val currentConsensus = state.log[heightOf(state,p)]
@@ -63,12 +69,12 @@ module Ledger{
 
 module LedgerTests {
 
-    import Spells.* from "./Spells"
-    import System.* from "./System"
+    import Spells.* from "../Common/Spells"
+    import System.* from "../Common/System"
     import Ledger.*
 
     pure val PROCESSES=Set("alice", "bob", "charlie")
-    pure val TXS=Set("t0", "t1", "t2")
+    pure val TXS=Set("T0", "T1", "T2", "T3")
 
     var st: LedgerState
 
@@ -82,10 +88,10 @@ module LedgerTests {
 
     action doSubmit = all {
       nondet p = oneOf(PROCESSES)
-      nondet tx = oneOf(TXS)
+      nondet txs = oneOf(TXS.powerset())
       all {
-        require(maySubmit(st, p, Set(tx))),
-    	st' = submit(st, p, Set(tx))
+        require(maySubmit(st, p, txs)),
+    	st' = submit(st, p, txs)
       }
     }
 
@@ -104,11 +110,11 @@ module LedgerTests {
 
     run submitTwiceError = {
       nondet p = oneOf(PROCESSES)
-      nondet tx = oneOf(TXS)
+      nondet txs = oneOf(TXS.powerset())
       init
       .then(
         all {
-	  maySubmit(submit(st, p, Set(tx)), p, Set(tx)),
+	  maySubmit(submit(st, p, txs), p, txs),
 	  st'=st
 	}
       )
@@ -130,10 +136,10 @@ module LedgerTests {
     run commitSubmittedSuccess = {
       nondet p = oneOf(PROCESSES)
       nondet q = oneOf(PROCESSES)
-      nondet tx0 = oneOf(TXS)
-      nondet tx1 = oneOf(TXS)
+      nondet txs0 = oneOf(TXS.powerset())
+      nondet txs1 = oneOf(TXS.powerset())
       init
-      .then(st'=submit(submit(st, p, Set(tx0)), q, Set(tx1)))
+      .then(st'=submit(submit(st, p, txs0), q, txs1))
       .then(
         all {
 	  mayCommit(st, p) and heightOf(commit(st, p), p)==1,

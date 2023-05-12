@@ -2,17 +2,17 @@
 // The common consensus abstraction where processes agree on some blocks (i.e., set of transactions).
 module Consensus{
 
-    import Spells.* from "./Spells"
-    import System.* from "./System"
+    import Spells.* from "../Common/Spells"
+    import System.* from "../Common/System"
 
     type ConsensusState = {
       proposed: Process -> Set[Tx],
-      decided: Process -> Set[Tx],
+      decided: Process -> Set[Tx]
     }
 
     pure def newConsensus(P: Set[Process]): ConsensusState = {
-      proposed: P.mapBy(x => Set()),
-      decided: P.mapBy(x => Set())
+      proposed: P.mapBy(p => Set()),
+      decided: P.mapBy(p => Set())
     }
 
     pure def processes(state: ConsensusState): Set[Process] = state.proposed.keys()
@@ -66,12 +66,12 @@ module Consensus{
 
 module ConsensusTests {
 
-    import Spells.* from "./Spells"
-    import System.* from "./System"
+    import Spells.* from "../Common/Spells"
+    import System.* from "../Common/System"
     import Consensus.*
 
     pure val PROCESSES=Set("alice", "bob", "charlie")
-    pure val TXS=Set("t0", "t1", "t2")
+    pure val TXS=Set("T0", "T1", "T2", "T3")
 
     var st: ConsensusState
 
@@ -85,10 +85,10 @@ module ConsensusTests {
 
     action doPropose = all {
       nondet p = oneOf(PROCESSES)
-      nondet tx = oneOf(TXS)
+      nondet txs = oneOf(TXS.powerset())
       all {
-        require(mayPropose(st, p, Set(tx))),
-        st' = propose(st, p, Set(tx))
+        require(mayPropose(st, p, txs)),
+        st' = propose(st, p, txs)
       }
     }
 
@@ -107,11 +107,11 @@ module ConsensusTests {
 
     run proposeTwiceError = {
       nondet p = oneOf(PROCESSES)
-      nondet tx = oneOf(TXS)
+      nondet txs = oneOf(TXS.powerset())
       init
       .then(
         all {
-    	  mayPropose(propose(st, p, Set(tx)), p, Set(tx)),
+    	  mayPropose(propose(st, p, txs), p, txs),
     	  st' = st
     	})
       .fail()
@@ -130,14 +130,14 @@ module ConsensusTests {
     run decideProposedSuccess = {
       nondet p = oneOf(PROCESSES)
       nondet q = oneOf(PROCESSES)
-      nondet tx0 = oneOf(TXS)
-      nondet tx1 = oneOf(TXS)
+      nondet txs0 = oneOf(TXS.powerset())
+      nondet txs1 = oneOf(TXS.powerset())
       init
-      .then(st' = propose(propose(st, p, Set(tx0)), q, Set(tx1)))
+      .then(st' = propose(propose(st, p, txs0), q, txs1))
       .then(
         all {
-	  st' = st,
-	  mayDecide(st, p) and hasDecided(decide(st, p), p)
+    	  st' = st,
+    	  mayDecide(st, p) and hasDecided(decide(st, p), p)
         })
     }
 
