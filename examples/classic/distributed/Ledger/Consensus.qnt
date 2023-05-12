@@ -1,4 +1,5 @@
 // -*- mode: Bluespec; -*-
+// The common consensus abstraction where processes agree on some blocks (i.e., set of transactions).
 module Consensus{
 
     import Spells.* from "./Spells"
@@ -9,19 +10,12 @@ module Consensus{
       decided: Process -> Set[Tx],
     }
 
-    type ConsensusResult = {
-      state: ConsensusState,
-      result: bool
+    pure def newConsensus(P: Set[Process]): ConsensusState = {
+      proposed: P.mapBy(x => Set()),
+      decided: P.mapBy(x => Set())
     }
 
-    pure def returnConsensusResult(state: ConsensusState, result: bool): ConsensusResult = {
-        {state: state, result: result}
-    }
-
-    pure def newConsensus(): ConsensusState = {
-      proposed: PROCESSES.mapBy(x => Set()),
-      decided: PROCESSES.mapBy(x => Set())
-    }
+    pure def processes(state: ConsensusState): Set[Process] = state.proposed.keys()
 
     pure def hasProposed(state: ConsensusState, p: Process): bool = state.proposed.get(p).size() > 0
     
@@ -31,15 +25,16 @@ module Consensus{
 
     pure def decisionOf(state: ConsensusState, p: Process): Set[Tx] = state.decided.get(p)
 
-    pure def mayPropose(state: ConsensusState, p: Process, txs: Set[Tx]): bool = PROCESSES.contains(p) and not(hasProposed(state, p)) and txs.size()!=0
+    pure def mayPropose(state: ConsensusState, p: Process, txs: Set[Tx]): bool = processes(state).contains(p) and not(hasProposed(state, p)) and txs.size()!=0
 
-    pure def mayDecide(state: ConsensusState, p: Process): bool = PROCESSES.contains(p) and state.hasProposed(p) and not(state.hasDecided(p))
+    pure def mayDecide(state: ConsensusState, p: Process): bool = processes(state).contains(p) and state.hasProposed(p) and not(state.hasDecided(p))
 
     pure def propose(state: ConsensusState, p: Process, txs: Set[Tx]): ConsensusState = {
       val newProposed = state.proposed.set(p, txs)
       state.with("proposed", newProposed)
     }
 
+    // decide any proposed values
     pure def decide(state: ConsensusState, p: Process): ConsensusState = {
       val proposal = state.proposed.get(oneOf(state.proposed.keys().filter(x => state.proposed.get(x).size()>0)))
       val decisions = state.decided.keys().filter(x => state.decided.get(x).size()>0)
@@ -51,14 +46,20 @@ module Consensus{
     // INVARIANTS
     
     // Irrevocability: a process decides at most once
-    // [Require applying Consensus:mayDecide before Consensus:decide]
+    // This requires applying Consensus:mayDecide before Consensus:decide.
     
     // Validity: a process decides only submitted values
-    // [Trivial from the code of Consensus:decide]
+    pure def consensusValidityInv(state: ConsensusState): bool = {
+      processes(state).forall(
+        p => not(hasDecided(state, p))
+	     or
+	     state.proposed.keys().filter(q => setEquals(state.proposed.get(q), state.decided.get(p))).size()>0
+      )
+    }
     
     // Agreement: no two processes decide different values
     pure def consensusAgreementInv(state: ConsensusState): bool = {
-       PROCESSES.forall(x => PROCESSES.forall(y => setEqualsOrOneEmpty(state.decided.get(x), state.decided.get(y))))
+       processes(state).forall(x => processes(state).forall(y => setEqualsOrOneEmpty(state.decided.get(x), state.decided.get(y))))
     }
 
 }
@@ -69,35 +70,75 @@ module ConsensusTests {
     import System.* from "./System"
     import Consensus.*
 
-    action initConsensusTests = all {
-        true
+    pure val PROCESSES=Set("alice", "bob", "charlie")
+    pure val TXS=Set("t0", "t1", "t2")
+
+    var st: ConsensusState
+
+    val invariant: bool = {
+      consensusValidityInv(st) and consensusAgreementInv(st)
+    }
+
+    action init = all {
+        st' = newConsensus(PROCESSES)
+    }
+
+    action doPropose = all {
+      nondet p = oneOf(PROCESSES)
+      nondet tx = oneOf(TXS)
+      all {
+        require(mayPropose(st, p, Set(tx))),
+        st' = propose(st, p, Set(tx))
+      }
+    }
+
+    action doDecide = all {
+      nondet p = oneOf(PROCESSES)
+      all {
+        require(mayDecide(st, p)),
+    	st' = decide(st, p)
+      }
+    }
+
+    action step = any {
+      doPropose,
+      doDecide
     }
 
     run proposeTwiceError = {
-      initConsensusTests.then(
-        nondet p = oneOf(PROCESSES)
-        nondet tx = oneOf(TXS)
-        val st = propose(newConsensus, p, Set(tx))
-	not(mayPropose(st, p, Set(tx)))
-      )
+      nondet p = oneOf(PROCESSES)
+      nondet tx = oneOf(TXS)
+      init
+      .then(
+        all {
+    	  mayPropose(propose(st, p, Set(tx)), p, Set(tx)),
+    	  st' = st
+    	})
+      .fail()
     }
 
     run decideNonProposedError = {
-      initConsensusTests.then(
-        nondet p = oneOf(PROCESSES)
-	not(mayDecide(newConsensus, p))
-      )
+      init
+      .then(
+        all {
+  	  mayDecide(st, oneOf(PROCESSES)),
+	  st' = st
+	})
+      .fail()
     }
 
     run decideProposedSuccess = {
-      initConsensusTests.then(
-        nondet p = oneOf(PROCESSES)
-    	nondet q = oneOf(PROCESSES)
-    	nondet tx0 = oneOf(TXS)
-    	nondet tx1 = oneOf(TXS)
-    	val st = propose(propose(newConsensus, p, Set(tx0)), q, Set(tx1))
-	mayDecide(st, p) and hasDecided(decide(st, p), p)
-      )
+      nondet p = oneOf(PROCESSES)
+      nondet q = oneOf(PROCESSES)
+      nondet tx0 = oneOf(TXS)
+      nondet tx1 = oneOf(TXS)
+      init
+      .then(st' = propose(propose(st, p, Set(tx0)), q, Set(tx1)))
+      .then(
+        all {
+	  st' = st,
+	  mayDecide(st, p) and hasDecided(decide(st, p), p)
+        })
     }
 
 }

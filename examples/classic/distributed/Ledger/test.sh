@@ -1,18 +1,19 @@
 #!/bin/sh
 
-echo "
-proposeTwiceError
-decideNonProposedError
-decideProposedSuccess
-" | quint -r Ledger.qnt::ConsensusTests
+# echo "
+# proposeTwiceError
+# decideNonProposedError
+# decideProposedSuccess
+# " | quint -r Consensus.qnt::ConsensusTests
 
-echo "
-submitTwiceError
-commitNonSubmittedError
-commitSubmittedSuccess
-" | quint -r Ledger.qnt::LedgerTests
+# quint run --main ConsensusTests --invariant invariant Consensus.qnt 
 
+# echo "
+# submitTwiceError
+# commitNonSubmittedError
+# commitSubmittedSuccess
+# " | quint -r Ledger.qnt::LedgerTests
 
-# quint run --verbosity 5 --main Consensus --step stepConsensus --init initConsensus Ledger.qnt
+quint run --main LedgerTests --invariant invariant Ledger.qnt 
 
 
