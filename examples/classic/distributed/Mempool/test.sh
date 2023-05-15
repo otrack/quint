@@ -1,9 +1,7 @@
 #!/bin/sh
 
-# echo "
-# moveHeightOnce
-# " | quint -r Mempool.qnt::MempoolTests
+echo "moveHeightOnce" | quint -r Mempool.qnt::MempoolTests
 
-quint run --main MempoolTests --invariant validInv Mempool.qnt 
+quint run --verbosity 3 --main MempoolTests --invariant allInv Mempool.qnt 
 
 

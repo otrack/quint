@@ -15,7 +15,7 @@ module Spells{
     }
 
     def setSubsetOfAtMost(s: Set[x], max: int): Set[x] = {
-      if (not(max>s.size())) s.exclude(oneOf(s.powerset().filter(u => u.size()==max))) else s
+      if (max>=size(s)) s else oneOf(s.powerset().filter(u => size(u)==max))
     }
 
 }

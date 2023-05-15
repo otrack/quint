@@ -1,5 +1,6 @@
 // -*- mode: Bluespec; -*-
 // The common consensus abstraction where processes agree on some blocks (i.e., set of transactions).
+
 module Consensus{
 
     import Spells.* from "../Common/Spells"

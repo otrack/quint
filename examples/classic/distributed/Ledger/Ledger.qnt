@@ -1,8 +1,9 @@
 // -*- mode: Bluespec; -*-
-// A Ledger is a replicated log of blocks.
+// A Ledger is a replicated log of blocks (i.e., set of transactions).
 // The specification below considers that
 // - replication is made with consensus (SMR)
-// - idempotence is not granted (that is, two entries might have transactions in common).
+// - idempotence is not granted (that is, two log entries might have transactions in common).
+
 module Ledger{
 
     import Spells.* from "../Common/Spells"
@@ -15,17 +16,24 @@ module Ledger{
 
     pure def newLedger(P: Set[Process]): LedgerState = {log: List(newConsensus(P))}
 
+    // index of the first null entry
     pure def height(state: LedgerState): int = length(state.log.select(s => s.hasDecision()))
 
     pure def heightOf(state: LedgerState, p: Process): int = length(state.log.select(s => s.hasDecided(p)))
 
     pure def entry(state: LedgerState, p: Process, i: int): Set[Tx] = state.log[i].decisionOf(p)
 
-    pure def lastEntry(state: LedgerState, p: Process): Set[Tx] = entry(state, p, heightOf(state, p))
+    pure def lastEntry(state: LedgerState, p: Process): Set[Tx] = entry(state, p, heightOf(state, p)-1)
 
-    pure def isSubmitted(state: LedgerState, t: Tx): bool = 0.to(height(state)).forall(h => not(isProposed(state.log[h], t)))
+    pure def isSubmitted(state: LedgerState, t: Tx): bool = 0.to(height(state)).exists(h => isProposed(state.log[h], t))
 
-    pure def isCommitted(state: LedgerState, t: Tx): bool = 0.to(height(state)).forall(h => not(isDecided(state.log[h], t)))
+    pure def isCommitted(state: LedgerState, t: Tx): bool = {
+      if (height(state)==0) false else 0.to(height(state)-1).exists(i => isDecided(state.log[i], t))
+    }
+
+    pure def isCommittedFor(state: LedgerState, p: Process, t: Tx): bool = {
+      if (heightOf(state, p)==0) false else 0.to(heightOf(state, p)-1).exists(h => isDecided(state.log[h], t))
+    }
 
     pure def maySubmit(state: LedgerState, p: Process, txs: Set[Tx]): bool = {
       val currentConsensus = state.log[heightOf(state,p)]
@@ -62,7 +70,7 @@ module Ledger{
     
     // Order: for any two processes, entries are prefix one from another
     pure def ledgerOrdertInv(state: LedgerState): bool = {
-      0.to(height(state)).forall(h => consensusAgreementInv(state.log[h]))
+      0.to(height(state)-1).forall(h => consensusAgreementInv(state.log[h]))
     }
 
 }
