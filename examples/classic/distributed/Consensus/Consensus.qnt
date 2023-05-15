@@ -58,7 +58,7 @@ module Consensus{
       processes(state).forall(
         p => not(hasDecided(state, p))
 	     or
-	     state.proposed.keys().filter(q => setEquals(state.proposed.get(q), state.decided.get(p))).size()>0
+	     state.proposed.keys().filter(q => state.proposed.get(q) == state.decided.get(p)).size()>0
       )
     }
     
