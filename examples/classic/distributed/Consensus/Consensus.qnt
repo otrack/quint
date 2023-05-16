@@ -30,6 +30,12 @@ module Consensus{
 
     pure def decisionOf(state: ConsensusState, p: Process): Set[Tx] = state.decided.get(p)
 
+    pure def proposalOf(state: ConsensusState, p: Process): Set[Tx] = state.proposed.get(p)
+
+    pure def getProposed(state: ConsensusState): Set[Tx] = flatten(mapValues(state.proposed))
+
+    pure def getDecided(state: ConsensusState): Set[Tx] = flatten(mapValues(state.decided))
+
     pure def mayPropose(state: ConsensusState, p: Process, txs: Set[Tx]): bool = processes(state).contains(p) and not(hasProposed(state, p)) and txs.size()!=0
 
     pure def mayDecide(state: ConsensusState, p: Process): bool = processes(state).contains(p) and state.hasProposed(p) and not(state.hasDecided(p))

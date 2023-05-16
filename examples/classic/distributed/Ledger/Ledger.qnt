@@ -25,6 +25,8 @@ module Ledger{
 
     pure def lastEntry(state: LedgerState, p: Process): Set[Tx] = entry(state, p, heightOf(state, p)-1)
 
+    pure def getSubmittedFor(state: LedgerState, p: Process): Set[Tx] = 0.to(heightOf(state, p)).fold(Set(), (s, i) => s.union(proposalOf(state.log[i],p)))
+
     pure def isSubmitted(state: LedgerState, t: Tx): bool = 0.to(height(state)).exists(h => isProposed(state.log[h], t))
 
     pure def isCommitted(state: LedgerState, t: Tx): bool = {

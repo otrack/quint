@@ -78,14 +78,16 @@ module MempoolTests {
 
     var ledger: LedgerState
     var mempool: MempoolState
+    var hmempool: Process -> Set[Tx] // history variable 
 
-    val print = {ledger: ledger, mempool: mempool}
+    val print = {ledger: ledger, mempool: mempool, hmempool: hmempool}
 
     action init : bool = all {
       val nledger = newLedger(PROCESSES)
       all {
         ledger' = nledger,
         mempool' = newMemPool(PROCESSES),
+	hmempool' = PROCESSES.mapBy(p => Set())
       }
     }
 
@@ -93,7 +95,8 @@ module MempoolTests {
       all {
         require(isValid(ledger, p, t)),
 	ledger' = ledger,
-        mempool' = add(mempool, p, t)
+        mempool' = add(mempool, p, t),
+	hmempool' = hmempool
       }
     }
 
@@ -102,7 +105,8 @@ module MempoolTests {
       all {
         require(txs.forall(t => isValid(ledger, p, t)) and maySubmit(ledger, p, txs)),
 	ledger' = submit(ledger, p, txs),
-      	mempool' = mempool
+      	mempool' = mempool,
+	hmempool' = hmempool.set(p, hmempool.get(p).union(txs))
       }
     }
 
@@ -112,7 +116,8 @@ module MempoolTests {
       all {
         require(mayCommit(ledger, p)),
 	ledger' = nledger,
-        mempool' = nmempool
+        mempool' = nmempool,
+	hmempool' = hmempool
       }
     }
 
@@ -130,22 +135,30 @@ module MempoolTests {
     // INVARIANTS
     
     // INV1. the mempool is used as an input for the ledger
-    // trivial from the code of doSubmit
-    
+    def inv1() = {
+      PROCESSES.forall(p => getSubmittedFor(ledger,p).subseteq(hmempool.get(p)))
+    }
+
     // INV2. committed transactions are not in the mempool
-    def gcInv() = {
-      PROCESSES.forall(p => 0.to(heightOf(ledger, p)-1).forall(i =>  entry(ledger, p, i).intersect(poolOf(mempool, p)).size()==0))      
+    def inv2() = {
+      PROCESSES.forall(p => 0.to(heightOf(ledger, p)-1).forall(i =>  entry(ledger, p, i).intersect(poolOf(mempool, p)).size()==0))
     }
 
     // INV3. every transaction in the mempool is valid
-    def validInv() = {
+    def inv3() = {
       PROCESSES.forall(p => poolOf(mempool, p).forall(t => isValid(ledger, p, t)))
     }
-
-    def allInv = {validInv and gcInv}
     
     // INV4. every transaction that appears in the mempool is eventually committed or forever invalid
-    // cannot be checked so far, instead we may check that after enough steps the mempool is empty
+    // cannot be checked ftm. with Quint
+    // instead we consider the (weaker) invariant below
+    // INV4b. every transaction in hmempool is always committed or if valid then still in the mempool
+    def inv4() = {
+      PROCESSES.forall(p => hmempool.get(p).forall(tx => isCommittedFor(ledger, p, tx) or not(isValid(ledger, p, tx)) or poolOf(mempool, p).contains(tx)))
+    }
+
+    def allInv = {inv1 and inv2 and inv3 and inv4}
+    
 
     run moveHeightOnce = {
       nondet p = oneOf(PROCESSES)
